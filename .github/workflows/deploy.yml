@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm test
 
@@ -40,7 +41,12 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/mess-manager-server:latest
+          # `latest` for the deploy script's `pull && up -d`, plus the commit
+          # SHA as an immutable tag — without it, a bad `latest` deploy has
+          # no earlier image reference left to roll back to.
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/mess-manager-server:latest
+            ghcr.io/${{ github.repository_owner }}/mess-manager-server:${{ github.sha }}
 
   deploy:
     needs: build-and-push
