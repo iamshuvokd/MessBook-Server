@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MessBook &middot; Master Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>MessBook &mdash; Master Admin</h1>
+</header>
+
+<div id="error-banner" class="banner hidden"></div>
+
+<section id="signed-out" class="panel hidden">
+  <p>Sign in with your Master Admin Google account.</p>
+  <!-- Client ID is public by design (not a secret) -- see auth.js on the server for the matching GOOGLE_CLIENT_IDS entry. -->
+  <div id="g_id_onload"
+       data-client_id="671805408245-ht6k75kjfkqt8oa0rtbden4esu84saks.apps.googleusercontent.com"
+       data-callback="handleCredentialResponse">
+  </div>
+  <div class="g_id_signin" data-type="standard"></div>
+</section>
+
+<section id="access-denied" class="panel hidden">
+  <p>This Google account isn't on the Master Admin allowlist.</p>
+</section>
+
+<section id="signed-in" class="panel hidden">
+  <div class="toolbar">
+    <button id="refresh-btn">Refresh</button>
+    <button id="sign-out-btn" class="secondary">Sign out</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Mess</th>
+        <th>Owner</th>
+        <th>Status</th>
+        <th>Members</th>
+        <th>Invite code</th>
+        <th>Paid until</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="groups-body"></tbody>
+  </table>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

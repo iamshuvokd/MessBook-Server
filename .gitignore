@@ -1,0 +1,5 @@
+node_modules/
+.env
+*.log
+.mysql-data/
+secrets/

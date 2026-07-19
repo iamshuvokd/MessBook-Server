@@ -1,0 +1,35 @@
+{
+  "name": "mess-manager-server",
+  "version": "0.1.0",
+  "description": "Sync + accounts API for Mess Manager. The Flutter app is offline-first; this server is a multi-device sync layer, never a hard dependency.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "db:migrate": "node db/migrate.js"
+  },
+  "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-async-errors": "^3.1.1",
+    "firebase-admin": "^14.1.0",
+    "google-auth-library": "^9.14.1",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.3",
+    "pino": "^9.4.0",
+    "pino-http": "^10.3.0",
+    "socket.io": "^4.8.3",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}

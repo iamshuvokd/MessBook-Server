@@ -1,0 +1,138 @@
+:root {
+  --teal: #007a6e;
+  --teal-dark: #004d45;
+  --honey: #c78a1f;
+  --ink: #1a2523;
+  --paper: #f6f5f0;
+  --border: #e0ddd2;
+  --danger: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+header {
+  background: var(--teal-dark);
+  color: white;
+  padding: 16px 24px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.panel {
+  max-width: 960px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.banner {
+  max-width: 960px;
+  margin: 16px auto 0;
+  padding: 10px 16px;
+  background: #fdecea;
+  color: var(--danger);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+th {
+  background: #eef3f1;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #4b5a57;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status-active { background: #e3f3ea; color: #1e7a44; }
+.status-expired { background: #fdf1d8; color: var(--honey); }
+.status-disabled { background: #fdecea; color: var(--danger); }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--teal);
+  color: white;
+  margin-right: 6px;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+input[type="date"] {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+code {
+  font-family: "JetBrains Mono", monospace;
+  background: #eef3f1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}

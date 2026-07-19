@@ -1,0 +1,54 @@
+# Production stack for the DigitalOcean droplet (Step 9). Caddy gives
+# automatic HTTPS from just a domain name -- no manual certbot/nginx config.
+#
+# Before first run on the droplet:
+#   1. Replace GHCR_OWNER below with your GitHub username/org (lowercase).
+#   2. Copy .env.example -> .env and fill in real secrets.
+#   3. Copy Caddyfile.example -> Caddyfile and set your real domain.
+#   4. Create ./secrets/firebase-service-account.json (chat push) -- never
+#      baked into the image (see .dockerignore), mounted read-only below.
+#   5. `docker compose -f docker-compose.prod.yml up -d`
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: mess_manager
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  api:
+    image: ghcr.io/GHCR_OWNER/mess-manager-server:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+      DB_USER: root
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      - mysql
+      - redis
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+
+volumes:
+  mysql_data:
+  redis_data:
+  caddy_data:
