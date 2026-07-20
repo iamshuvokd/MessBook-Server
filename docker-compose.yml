@@ -8,7 +8,11 @@ services:
       MYSQL_ROOT_PASSWORD: devroot
       MYSQL_DATABASE: mess_manager
     ports:
-      - '3306:3306'
+      # Overridable per-machine via MYSQL_HOST_PORT in a local .env — useful
+      # when host 3306 is already taken by a system MySQL install. Doesn't
+      # affect the api container, which always reaches this over the
+      # internal Docker network on the container's normal 3306.
+      - '${MYSQL_HOST_PORT:-3306}:3306'
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:

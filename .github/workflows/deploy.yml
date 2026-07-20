@@ -15,6 +15,29 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Backs the DB-touching integration tests (sync push/pull, groups
+    # bring-online/join) — the same MySQL 8 image docker-compose.yml uses
+    # for local dev, so behavior matches what actually runs in production.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testroot
+          MYSQL_DATABASE: mess_manager
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptestroot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: testroot
+      DB_NAME: mess_manager
+      JWT_SECRET: ci-test-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +45,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run db:migrate
       - run: npm test
 
   build-and-push:
