@@ -85,7 +85,14 @@ async function onlineGroupWithTwoMembers() {
   const member = await createUser();
   const joined = await post('/groups/join', member.token, { code: created.body.inviteCode, memberName: 'Member B' });
   assert.equal(joined.status, 200);
-  return { owner, member, groupId, adminMemberId };
+  return { owner, member, groupId, adminMemberId, inviteCode: created.body.inviteCode };
+}
+
+async function joinAnotherMember(groupId, inviteCode, name) {
+  const user = await createUser();
+  const joined = await post('/groups/join', user.token, { code: inviteCode, memberName: name });
+  assert.equal(joined.status, 200);
+  return { user, memberId: joined.body.memberId };
 }
 
 function mealPush(groupId, memberId) {
@@ -94,6 +101,36 @@ function mealPush(groupId, memberId) {
     changes: {
       categories: [{ id: randomUUID(), groupId, name: 'Bazar', isMealCategory: true, icon: 'x', updatedAt: now }],
       meals: [{ id: randomUUID(), groupId, memberId, date: now, count: 2, guestCount: 0, updatedAt: now }],
+    },
+  };
+}
+
+// The exact table set a client produces when it closes a 'slots' poll: the
+// poll flips to closed, each voter's meal is written with slot data, and the
+// votes are synced too. Mirrors PollsRepository.closePoll's local writes,
+// which the client then pushes via /sync/push (it does NOT use the dedicated
+// /polls routes) — so this is how poll-driven meals reach everyone live.
+function pollClosePush(groupId, memberId) {
+  const now = Date.now();
+  const pollId = randomUUID();
+  const slotId = randomUUID();
+  return {
+    changes: {
+      mealSlots: [{ id: slotId, groupId, name: 'Lunch', weight: 1, sortOrder: 0, active: true, updatedAt: now }],
+      mealPolls: [
+        {
+          id: pollId,
+          groupId,
+          date: now,
+          type: 'slots',
+          closeAt: now - 1000,
+          createdByMemberId: memberId,
+          closed: true,
+          updatedAt: now,
+        },
+      ],
+      mealPollVotes: [{ pollId, memberId, valueJson: JSON.stringify({ slotIds: [slotId] }), votedAt: now }],
+      meals: [{ id: randomUUID(), groupId, memberId, date: now, count: 1, guestCount: 0, slotsJson: JSON.stringify([slotId]), updatedAt: now }],
     },
   };
 }
@@ -168,4 +205,55 @@ test('a push that changes nothing (all conflicts) broadcasts no dataChanged', as
   assert.equal(conflictPush.body.results.meals[0].status, 'conflict');
 
   assert.equal(await heard, null, 'no accepted rows means no dataChanged broadcast');
+});
+
+test('a meal edit fans out live to EVERY other member viewing the group, not just one', async () => {
+  const { owner, member, groupId, adminMemberId, inviteCode } = await onlineGroupWithTwoMembers();
+  const third = await joinAnotherMember(groupId, inviteCode, 'Member C');
+
+  // Owner (the editor) plus two other members are all viewing the grid.
+  const sockOwner = await connectSocket(owner.token);
+  const sockB = await connectSocket(member.token);
+  const sockC = await connectSocket(third.user.token);
+  await joinGroup(sockOwner, groupId);
+  await joinGroup(sockB, groupId);
+  await joinGroup(sockC, groupId);
+
+  const heardB = nextDataChanged(sockB);
+  const heardC = nextDataChanged(sockC);
+
+  const push = await post(`/groups/${groupId}/sync/push`, owner.token, mealPush(groupId, adminMemberId));
+  assert.equal(push.status, 200);
+
+  const [payloadB, payloadC] = await Promise.all([heardB, heardC]);
+  for (const [who, p] of [['B', payloadB], ['C', payloadC]]) {
+    assert.ok(p, `member ${who} must receive the live meal update`);
+    assert.ok(p.tables.includes('meals'), `member ${who}'s dataChanged must include meals`);
+  }
+});
+
+test('poll-driven meals (a closed slots poll) broadcast live to all members', async () => {
+  const { owner, member, groupId, adminMemberId, inviteCode } = await onlineGroupWithTwoMembers();
+  const third = await joinAnotherMember(groupId, inviteCode, 'Member C');
+
+  const sockB = await connectSocket(member.token);
+  const sockC = await connectSocket(third.user.token);
+  await joinGroup(sockB, groupId);
+  await joinGroup(sockC, groupId);
+
+  const heardB = nextDataChanged(sockB);
+  const heardC = nextDataChanged(sockC);
+
+  // Owner's device closes a poll locally, then pushes the resulting rows.
+  const push = await post(`/groups/${groupId}/sync/push`, owner.token, pollClosePush(groupId, adminMemberId));
+  assert.equal(push.status, 200);
+  assert.equal(push.body.results.meals[0].status, 'accepted');
+  assert.equal(push.body.results.mealPolls[0].status, 'accepted');
+
+  const [payloadB, payloadC] = await Promise.all([heardB, heardC]);
+  for (const [who, p] of [['B', payloadB], ['C', payloadC]]) {
+    assert.ok(p, `member ${who} must receive the poll-close broadcast`);
+    assert.ok(p.tables.includes('meals'), `member ${who} must be told meals changed`);
+    assert.ok(p.tables.includes('mealPolls'), `member ${who} must be told the poll changed`);
+  }
 });
