@@ -91,6 +91,17 @@ syncRouter.post('/groups/:id/sync/push', blockIfExpired, async (req, res) => {
 
     for (const camelRow of rows) {
       const snakeRow = toSnakeRow(key, camelRow);
+
+      // Role assignment is App-Admin-only and non-delegable — the dedicated
+      // role route enforces that, and without this the generic push would be
+      // a back door straight around it: any member could push their own
+      // members row with role='appAdmin' and promote themselves. Dropping
+      // the columns (rather than rejecting the row) keeps ordinary member
+      // syncs working; role changes simply have to go through the real route.
+      if (key === 'members' && req.membership.role !== 'appAdmin') {
+        delete snakeRow.role;
+        delete snakeRow.permissions;
+      }
       const pkWhere = def.primaryKey.map((k) => `\`${def.columns.find((c) => c.camel === k).snake}\` = ?`).join(' AND ');
       const pkValues = def.primaryKey.map((k) => camelRow[k]);
 
