@@ -4,6 +4,7 @@ import { requireAuth, loadGroupContext } from '../middleware/auth.js';
 import { blockIfExpired } from '../middleware/permissions.js';
 import { TABLES, toSnakeRow, toCamelRow } from '../sync/tables.js';
 import { broadcastDataChanged } from '../chat/socket.js';
+import { pushPollCreated } from '../push/fcm.js';
 
 export const syncRouter = Router();
 
@@ -78,6 +79,10 @@ syncRouter.post('/groups/:id/sync/push', blockIfExpired, async (req, res) => {
   if (!req.membership) return res.status(403).json({ error: 'not_a_member' });
   const changes = req.body.changes || {};
   const results = {};
+  // Polls that are brand-new to the server on this push (not an edit of an
+  // existing one) and still open — these earn a "poll created" push to the
+  // other members once the DB work is done.
+  const newlyCreatedPolls = [];
 
   for (const [key, rows] of Object.entries(changes)) {
     const def = TABLES[key];
@@ -108,7 +113,23 @@ syncRouter.post('/groups/:id/sync/push', blockIfExpired, async (req, res) => {
         columns.map((c) => snakeRow[c]),
       );
       results[key].push({ id: pkValues.join(':'), status: 'accepted' });
+
+      if (key === 'mealPolls' && !existing && !camelRow.closed) {
+        newlyCreatedPolls.push({ title: camelRow.title, createdByMemberId: camelRow.createdByMemberId });
+      }
     }
+  }
+
+  // Push "new meal poll" to the other members (backgrounded/killed fallback;
+  // members with the app open already got the dataChanged nudge below).
+  // Fire-and-forget — never blocks or fails the sync response.
+  for (const poll of newlyCreatedPolls) {
+    pushPollCreated({
+      groupId: req.params.id,
+      pollTitle: poll.title,
+      createdByMemberId: poll.createdByMemberId,
+      excludeUserId: req.user.id,
+    }).catch(() => {});
   }
 
   // Nudge any other device currently viewing this group to pull now instead

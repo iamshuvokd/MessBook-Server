@@ -78,6 +78,54 @@ export async function pushNewChatMessage({ groupId, senderMemberId, senderName, 
  * next periodic sync. `data.type` lets the client trigger a sync on receipt
  * instead of just displaying a notification. Best-effort, like chat push.
  */
+/**
+ * Notifies every *other* linked member of a group that a new meal poll was
+ * created, so they know to go vote — the in-app live update (dataChanged)
+ * already covers members with the app open; this is the backgrounded/killed
+ * fallback. Best-effort, same as the others. Resolves the group and creator
+ * names itself so callers only pass ids.
+ */
+export async function pushPollCreated({ groupId, pollTitle, createdByMemberId, excludeUserId }) {
+  const fcm = getMessaging();
+  if (!fcm) return;
+
+  try {
+    const [grpRows] = await pool.query('SELECT name FROM `groups` WHERE id = ?', [groupId]);
+    const groupName = grpRows[0]?.name ?? 'Mess';
+    const [creatorRows] = await pool.query('SELECT name FROM members WHERE id = ?', [createdByMemberId]);
+    const creatorName = creatorRows[0]?.name ?? '';
+
+    const [rows] = await pool.query(
+      `SELECT DISTINCT dt.fcm_token FROM device_tokens dt
+       JOIN members m ON m.user_id = dt.user_id
+       WHERE m.group_id = ? AND m.active = TRUE AND m.user_id != ?`,
+      [groupId, excludeUserId],
+    );
+    const tokens = rows.map((r) => r.fcm_token);
+    if (tokens.length === 0) return;
+
+    const body = pollTitle && pollTitle.trim() ? pollTitle.trim() : (creatorName ? `${creatorName} started a meal poll` : 'New meal poll — tap to vote');
+    const response = await fcm.sendEachForMulticast({
+      tokens,
+      notification: { title: groupName, body },
+      data: { groupId, type: 'pollCreated' },
+    });
+
+    const stale = [];
+    response.responses.forEach((r, i) => {
+      const code = r.error?.code;
+      if (!r.success && (code === 'messaging/invalid-registration-token' || code === 'messaging/registration-token-not-registered')) {
+        stale.push(tokens[i]);
+      }
+    });
+    if (stale.length > 0) {
+      await pool.query(`DELETE FROM device_tokens WHERE fcm_token IN (${stale.map(() => '?').join(',')})`, stale);
+    }
+  } catch (err) {
+    console.error('FCM send failed:', err.message);
+  }
+}
+
 export async function pushMemberJoined({ groupId, groupName, newMemberName, excludeUserId }) {
   const fcm = getMessaging();
   if (!fcm) return;

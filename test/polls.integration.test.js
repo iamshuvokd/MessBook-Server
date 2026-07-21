@@ -101,6 +101,31 @@ test('a sub-admin granted polls.manage can delete a poll', async () => {
   assert.equal(res.status, 204);
 });
 
+test('pushing a brand-new open poll via sync is accepted and stored (poll-created path is safe with FCM off)', async () => {
+  const app = createApp();
+  const owner = await createUser();
+  const adminMemberId = randomUUID();
+  const { groupId } = await bringOnline(app, owner.token, adminMemberId);
+
+  const now = Date.now();
+  const pollId = randomUUID();
+  const res = await request(app)
+    .post(`/groups/${groupId}/sync/push`)
+    .set('Authorization', `Bearer ${owner.token}`)
+    .send({
+      changes: {
+        mealPolls: [
+          { id: pollId, groupId, date: now, type: 'count', title: 'Dinner tonight?', closeAt: now + 3_600_000, createdByMemberId: adminMemberId, closed: false, updatedAt: now },
+        ],
+      },
+    });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.results.mealPolls[0].status, 'accepted');
+
+  const [rows] = await pool.query('SELECT closed FROM meal_polls WHERE id = ?', [pollId]);
+  assert.equal(rows.length, 1);
+});
+
 test('a non-member cannot delete a poll in a group they do not belong to', async () => {
   const app = createApp();
   const owner = await createUser();
