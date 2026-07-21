@@ -213,6 +213,15 @@ async function memberHasHistory(memberId) {
   return checks.some(([rows]) => rows.length > 0);
 }
 
+// A bazar duty is a plain scheduling row with no dependants, so it hard
+// deletes. The server side is required: sync only ever upserts, so a purely
+// local delete would come straight back on the member's next pull.
+groupsRouter.delete('/groups/:id/bazar/:dutyId', loadGroupContext, requirePermission('meals.manage'), async (req, res) => {
+  const { id: groupId, dutyId } = req.params;
+  await pool.query('DELETE FROM bazar_duties WHERE id = ? AND group_id = ?', [dutyId, groupId]);
+  res.status(204).end();
+});
+
 groupsRouter.delete('/groups/:id/members/:mid', loadGroupContext, requirePermission('members.manage'), async (req, res) => {
   const { id: groupId, mid: memberId } = req.params;
   if (await memberHasHistory(memberId)) {

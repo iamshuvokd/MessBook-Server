@@ -171,6 +171,49 @@ test('transferring ownership promotes the target, demotes the caller, and moves 
   assert.equal(deniedRes.status, 403);
 });
 
+test('a bazar duty can be deleted server-side (so it does not reappear on the next pull)', async () => {
+  const app = createApp();
+  const owner = await createTestUser();
+  const adminMemberId = randomUUID();
+  const { groupId } = await bringGroupOnline(app, owner.token, { appAdminMemberId: adminMemberId });
+
+  const dutyId = randomUUID();
+  const now = Date.now();
+  await pool.query(
+    'INSERT INTO bazar_duties (id, group_id, member_id, date, done, updated_at) VALUES (?, ?, ?, ?, FALSE, ?)',
+    [dutyId, groupId, adminMemberId, now, now],
+  );
+
+  const res = await request(app).delete(`/groups/${groupId}/bazar/${dutyId}`).set('Authorization', `Bearer ${owner.token}`);
+  assert.equal(res.status, 204);
+
+  const [rows] = await pool.query('SELECT id FROM bazar_duties WHERE id = ?', [dutyId]);
+  assert.equal(rows.length, 0, 'the duty must be gone server-side, not just locally');
+});
+
+test('a plain member cannot delete a bazar duty', async () => {
+  const app = createApp();
+  const owner = await createTestUser();
+  const adminMemberId = randomUUID();
+  const { groupId, inviteCode } = await bringGroupOnline(app, owner.token, { appAdminMemberId: adminMemberId });
+
+  const joiner = await createTestUser();
+  await request(app).post('/groups/join').set('Authorization', `Bearer ${joiner.token}`).send({ code: inviteCode, memberName: 'Plain' });
+
+  const dutyId = randomUUID();
+  const now = Date.now();
+  await pool.query(
+    'INSERT INTO bazar_duties (id, group_id, member_id, date, done, updated_at) VALUES (?, ?, ?, ?, FALSE, ?)',
+    [dutyId, groupId, adminMemberId, now, now],
+  );
+
+  const res = await request(app).delete(`/groups/${groupId}/bazar/${dutyId}`).set('Authorization', `Bearer ${joiner.token}`);
+  assert.equal(res.status, 403);
+
+  const [rows] = await pool.query('SELECT id FROM bazar_duties WHERE id = ?', [dutyId]);
+  assert.equal(rows.length, 1, 'an unauthorized delete must leave the duty intact');
+});
+
 test('GET /groups lists messes the caller owns or has joined, and nothing else', async () => {
   const app = createApp();
   const owner = await createTestUser();
