@@ -30,6 +30,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "socket.io-client": "^4.8.3",
     "supertest": "^7.0.0"
   }
 }
