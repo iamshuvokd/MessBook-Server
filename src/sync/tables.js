@@ -17,7 +17,8 @@ export const TABLES = {
     groupScoped: false, // the group row itself
     columns: [
       col('id'), col('name'), col('type'), col('currencySymbol'), col('monthStartDay'),
-      col('mealEnabled'), col('mealLedgerSeparate'), col('defaultNonVoterPolicy'), col('archived'),
+      col('mealEnabled'), col('mealLedgerSeparate'), col('defaultNonVoterPolicy'),
+      col('pollReminderMinutes'), col('archived'),
       col('createdAt'), col('updatedAt'),
     ],
   },

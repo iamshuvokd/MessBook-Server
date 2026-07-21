@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS `groups` (
   meal_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   meal_ledger_separate BOOLEAN NOT NULL DEFAULT FALSE,
   default_non_voter_policy VARCHAR(16) NOT NULL DEFAULT 'routine',
+  -- Minutes before a poll closes that every member's device fires the
+  -- "vote now" reminder (mess-wide, App-Admin set; 0 = off).
+  poll_reminder_minutes INT NOT NULL DEFAULT 30,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
   -- Subscription / Master Admin control (user decision: buyer pays the
   -- user directly, Master extends `paid_until` manually via the web
