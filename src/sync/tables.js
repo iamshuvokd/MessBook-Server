@@ -18,7 +18,8 @@ export const TABLES = {
     columns: [
       col('id'), col('name'), col('type'), col('currencySymbol'), col('monthStartDay'),
       col('mealEnabled'), col('mealLedgerSeparate'), col('defaultNonVoterPolicy'),
-      col('pollReminderMinutes'), col('archived'),
+      col('pollReminderMinutes'), col('lowBalanceThresholdPaisa'), col('autoMealOffBelowThreshold'),
+      col('archived'),
       col('createdAt'), col('updatedAt'),
     ],
   },

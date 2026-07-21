@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS `groups` (
   -- Minutes before a poll closes that every member's device fires the
   -- "vote now" reminder (mess-wide, App-Admin set; 0 = off).
   poll_reminder_minutes INT NOT NULL DEFAULT 30,
+  -- Warn when a member's remaining balance drops below this (paisa);
+  -- 0 = no threshold set. When auto_meal_off_below_threshold is on, such a
+  -- member also stops getting meals added automatically.
+  low_balance_threshold_paisa BIGINT NOT NULL DEFAULT 0,
+  auto_meal_off_below_threshold BOOLEAN NOT NULL DEFAULT FALSE,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
   -- Subscription / Master Admin control (user decision: buyer pays the
   -- user directly, Master extends `paid_until` manually via the web
