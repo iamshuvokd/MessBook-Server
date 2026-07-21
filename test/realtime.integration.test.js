@@ -232,6 +232,45 @@ test('a meal edit fans out live to EVERY other member viewing the group, not jus
   }
 });
 
+test('a poll vote broadcasts live to all members (everyone sees votes in real time)', async () => {
+  const { owner, member, groupId, adminMemberId, inviteCode } = await onlineGroupWithTwoMembers();
+  const third = await joinAnotherMember(groupId, inviteCode, 'Member C');
+
+  // First get an open poll onto the server (owner creates it via sync push).
+  const now = Date.now();
+  const pollId = randomUUID();
+  await post(`/groups/${groupId}/sync/push`, owner.token, {
+    changes: {
+      mealPolls: [
+        { id: pollId, groupId, date: now, type: 'count', closeAt: now + 3_600_000, createdByMemberId: adminMemberId, closed: false, updatedAt: now },
+      ],
+    },
+  });
+
+  const sockOwner = await connectSocket(owner.token);
+  const sockC = await connectSocket(third.user.token);
+  await joinGroup(sockOwner, groupId);
+  await joinGroup(sockC, groupId);
+
+  const heardOwner = nextDataChanged(sockOwner);
+  const heardC = nextDataChanged(sockC);
+
+  // Member B casts a vote (client writes locally then syncs the vote row).
+  const votePush = await post(`/groups/${groupId}/sync/push`, member.token, {
+    changes: {
+      mealPollVotes: [{ pollId, memberId: adminMemberId, valueJson: JSON.stringify({ count: 2 }), votedAt: Date.now() }],
+    },
+  });
+  assert.equal(votePush.status, 200);
+  assert.equal(votePush.body.results.mealPollVotes[0].status, 'accepted');
+
+  const [payloadOwner, payloadC] = await Promise.all([heardOwner, heardC]);
+  for (const [who, p] of [['owner', payloadOwner], ['C', payloadC]]) {
+    assert.ok(p, `${who} must receive the vote live`);
+    assert.ok(p.tables.includes('mealPollVotes'), `${who}'s dataChanged must include mealPollVotes`);
+  }
+});
+
 test('poll-driven meals (a closed slots poll) broadcast live to all members', async () => {
   const { owner, member, groupId, adminMemberId, inviteCode } = await onlineGroupWithTwoMembers();
   const third = await joinAnotherMember(groupId, inviteCode, 'Member C');
