@@ -48,6 +48,15 @@ pollsRouter.get('/groups/:id/polls', loadGroupContext, async (req, res) => {
   res.json({ polls });
 });
 
+// Deleting a poll is a management action (App Admin, or a sub-admin granted
+// polls.manage). Votes are removed by the meal_poll_votes ON DELETE CASCADE.
+// Meals already recorded from an earlier close are separate rows and remain.
+pollsRouter.delete('/groups/:id/polls/:pollId', loadGroupContext, requirePermission('polls.manage'), async (req, res) => {
+  const { id: groupId, pollId } = req.params;
+  await pool.query('DELETE FROM meal_polls WHERE id = ? AND group_id = ?', [pollId, groupId]);
+  res.status(204).end();
+});
+
 const voteSchema = z.object({
   slotIds: z.array(z.string()).optional(),
   count: z.number().optional(),
