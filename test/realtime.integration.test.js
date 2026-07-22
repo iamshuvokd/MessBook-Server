@@ -296,3 +296,86 @@ test('poll-driven meals (a closed slots poll) broadcast live to all members', as
     assert.ok(p.tables.includes('mealPolls'), `member ${who} must be told the poll changed`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Reconnect behaviour. Both live sync and chat were reported dead in the same
+// session; the shared cause is that a reconnected socket lands in NO rooms.
+// These pin the server contract that forces clients to re-join on EVERY
+// connect (RealtimeService and ChatService both do this in onConnect).
+// ---------------------------------------------------------------------------
+
+const nextNewMessage = (socket, timeoutMs = 5000) =>
+  new Promise((resolve) => {
+    socket.once('newMessage', resolve);
+    setTimeout(() => resolve(null), timeoutMs);
+  });
+
+const sendChat = (socket, groupId, text) =>
+  new Promise((resolve) => socket.emit('sendMessage', { groupId, text }, resolve));
+
+async function reconnect(socket) {
+  const back = new Promise((resolve) => socket.once('connect', resolve));
+  socket.io.engine.close(); // exactly what a network blip does
+  await back;
+}
+
+test('a RECONNECTED socket receives nothing until it re-joins — the live-sync death', async () => {
+  const { owner, member, groupId, adminMemberId } = await onlineGroupWithTwoMembers();
+  const socket = await connectSocket(member.token);
+  await joinGroup(socket, groupId);
+
+  // Baseline: while joined, pushes arrive.
+  let incoming = nextDataChanged(socket);
+  await post(`/groups/${groupId}/sync/push`, owner.token, mealPush(groupId, adminMemberId));
+  assert.ok(await incoming, 'a joined socket should receive dataChanged');
+
+  await reconnect(socket);
+
+  // The bug: a client that joined only once is now silently in no room.
+  incoming = nextDataChanged(socket, 1500);
+  await post(`/groups/${groupId}/sync/push`, owner.token, mealPush(groupId, adminMemberId));
+  assert.equal(await incoming, null, 'a reconnected socket must NOT still be in the room');
+
+  // The fix: re-joining on connect restores live updates.
+  await joinGroup(socket, groupId);
+  incoming = nextDataChanged(socket);
+  await post(`/groups/${groupId}/sync/push`, owner.token, mealPush(groupId, adminMemberId));
+  assert.ok(await incoming, 're-joining after reconnect must restore live updates');
+});
+
+test('chat messages fan out live to other members in the room', async () => {
+  const { owner, member, groupId } = await onlineGroupWithTwoMembers();
+  const ownerSocket = await connectSocket(owner.token);
+  const memberSocket = await connectSocket(member.token);
+  await joinGroup(ownerSocket, groupId);
+  await joinGroup(memberSocket, groupId);
+
+  const incoming = nextNewMessage(memberSocket);
+  const ack = await sendChat(ownerSocket, groupId, 'bazar ke jabe?');
+  assert.equal(ack.error, undefined, JSON.stringify(ack));
+
+  const received = await incoming;
+  assert.ok(received, 'the other member must receive the chat message live');
+  assert.equal(received.text, 'bazar ke jabe?');
+});
+
+test('chat also goes silent after a reconnect until the room is re-joined', async () => {
+  const { owner, member, groupId } = await onlineGroupWithTwoMembers();
+  const ownerSocket = await connectSocket(owner.token);
+  const memberSocket = await connectSocket(member.token);
+  await joinGroup(ownerSocket, groupId);
+  await joinGroup(memberSocket, groupId);
+
+  await reconnect(memberSocket);
+
+  let incoming = nextNewMessage(memberSocket, 1500);
+  await sendChat(ownerSocket, groupId, 'anyone there?');
+  assert.equal(await incoming, null, 'a reconnected chat socket is no longer in the room');
+
+  await joinGroup(memberSocket, groupId);
+  incoming = nextNewMessage(memberSocket);
+  await sendChat(ownerSocket, groupId, 'back now');
+  const received = await incoming;
+  assert.ok(received, 're-joining must restore chat delivery');
+  assert.equal(received.text, 'back now');
+});

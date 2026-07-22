@@ -124,3 +124,13 @@ export function broadcastDataChanged(groupId, tables) {
   if (!ioInstance || !tables || tables.length === 0) return;
   ioInstance.to(`group:${groupId}`).emit('dataChanged', { tables, serverTimeMs: Date.now() });
 }
+
+/**
+ * The mess itself was deleted by its App Admin. Distinct from `dataChanged`
+ * because there is nothing left to pull — a member's device has to drop the
+ * mess locally rather than sync it.
+ */
+export function broadcastGroupDeleted(groupId) {
+  if (!ioInstance) return;
+  ioInstance.to(`group:${groupId}`).emit('groupDeleted', { groupId, serverTimeMs: Date.now() });
+}

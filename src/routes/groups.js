@@ -5,6 +5,7 @@ import { requireAuth, loadGroupContext } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { generateInviteCode } from '../utils/inviteCode.js';
 import { pushMemberJoined } from '../push/fcm.js';
+import { broadcastGroupDeleted } from '../chat/socket.js';
 
 export const groupsRouter = Router();
 groupsRouter.use(requireAuth);
@@ -212,6 +213,62 @@ async function memberHasHistory(memberId) {
   ]);
   return checks.some(([rows]) => rows.length > 0);
 }
+
+/**
+ * Delete an entire mess and everything in it. App-Admin-only and
+ * irreversible — the client confirms hard before ever calling this.
+ *
+ * Every group-scoped table cascades from `groups`, but several tables also
+ * carry a plain (non-cascading) FK to `members`, so leaving it to MySQL's
+ * cascade would depend on the order InnoDB happens to unwind them and can
+ * fail with a foreign-key error. Deleting children explicitly, deepest
+ * first, inside one transaction makes it deterministic and all-or-nothing.
+ */
+groupsRouter.delete('/groups/:id', loadGroupContext, async (req, res) => {
+  if (req.membership?.role !== 'appAdmin') return res.status(403).json({ error: 'app_admin_only' });
+  const groupId = req.params.id;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Grandchildren: reached through a parent row, so they must go first.
+    await conn.query('DELETE v FROM meal_poll_votes v JOIN meal_polls p ON v.poll_id = p.id WHERE p.group_id = ?', [groupId]);
+    await conn.query('DELETE ep FROM expense_payers ep JOIN expenses e ON ep.expense_id = e.id WHERE e.group_id = ?', [groupId]);
+    await conn.query('DELETE es FROM expense_splits es JOIN expenses e ON es.expense_id = e.id WHERE e.group_id = ?', [groupId]);
+    await conn.query('DELETE r FROM member_meal_routines r JOIN members m ON r.member_id = m.id WHERE m.group_id = ?', [groupId]);
+    await conn.query('DELETE l FROM meal_leaves l JOIN members m ON l.member_id = m.id WHERE m.group_id = ?', [groupId]);
+
+    // Group-scoped rows that reference members — these must clear before
+    // the member rows they point at.
+    for (const table of [
+      'meal_polls', 'chat_messages', 'meals', 'deposits', 'settlements',
+      'expenses', 'bazar_duties', 'meal_slots', 'months', 'recurring_rules', 'categories',
+    ]) {
+      await conn.query(`DELETE FROM \`${table}\` WHERE group_id = ?`, [groupId]);
+    }
+
+    await conn.query('DELETE FROM members WHERE group_id = ?', [groupId]);
+    await conn.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  // Tell any other member's device sitting in this mess that it is gone, so
+  // they don't keep showing a mess that no longer exists server-side.
+  try {
+    broadcastGroupDeleted(groupId);
+  } catch {
+    // ignore
+  }
+
+  res.status(204).end();
+});
 
 // A bazar duty is a plain scheduling row with no dependants, so it hard
 // deletes. The server side is required: sync only ever upserts, so a purely
